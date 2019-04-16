@@ -22,7 +22,7 @@ namespace Exam
             if (item != null)
             {
                 Detail = new NavigationPage((Page)Activator.CreateInstance(typeof(DetailPageView),item));
-                masterView.ListView.SelectedItem = null;
+                //masterView.ListView.SelectedItem = null;
                 IsPresented = false;
             }
         }

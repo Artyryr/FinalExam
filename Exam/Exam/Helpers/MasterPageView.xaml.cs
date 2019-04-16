@@ -31,69 +31,76 @@ namespace Exam.Helpers
         {
             if (txtSearch.Text != " ")
             {
-                // if flickrTask already running, prompt user 
-                if (flickrTask?.Status != TaskStatus.RanToCompletion)
+                try
                 {
-                    bool answer = await DisplayAlert("Alert", "Cancel the current Flickr search?", "Yes", "No");
-                    if (answer)
+                    // if flickrTask already running, prompt user 
+                    if (flickrTask?.Status != TaskStatus.RanToCompletion)
                     {
-                        return;
+                        bool answer = await DisplayAlert("Alert", "Cancel the current Flickr search?", "No", "Yes");
+                        if (answer)
+                        {
+                            return;
+                        }
+                        else
+                        {
+                            flickrClient.CancelPendingRequests(); // cancel search
+                        }
+                    }
+
+                    // Flickr's web service URL for searches                         
+                    var flickrURL = "https://api.flickr.com/services/rest/?method=" +
+                       $"flickr.photos.search&api_key={KEY}&" +
+                       $"tags={txtSearch.Text.Replace(" ", ",")}" +
+                       "&tag_mode=all&per_page=500&privacy_filter=1";
+
+                    ListView.ItemsSource = null;
+                    flickrPhotos = new List<FlickrResult>() { };
+                    masterNavigationItems = new List<MasterNavigationItem>() { };
+
+                    flickrTask = flickrClient.GetStringAsync(flickrURL);
+
+                    XDocument flickrXML = XDocument.Parse(await flickrTask);
+
+                    flickrPhotos =
+                    (from photo in flickrXML.Descendants("photo")
+                     let id = photo.Attribute("id").Value
+                     let title = photo.Attribute("title").Value
+                     let secret = photo.Attribute("secret").Value
+                     let server = photo.Attribute("server").Value
+                     let farm = photo.Attribute("farm").Value
+                     select new FlickrResult
+                     {
+                         Title = title,
+                         URL = $"https://farm{farm}.staticflickr.com/" +
+                           $"{server}/{id}_{secret}.jpg"
+                     }).ToList();
+
+                    if (flickrPhotos.Any())
+                    {
+                        await Task.Factory.StartNew(() =>
+                        {
+                            ParallelLoopResult loopResult = Parallel.ForEach<FlickrResult>(flickrPhotos, photo =>
+                            {
+                                MasterNavigationItem item = new MasterNavigationItem
+                                {
+                                    Icon = photo.URL,
+                                    Title = photo.Title,
+                                    Target = typeof(DetailPageView)
+                                };
+
+                                masterNavigationItems.Add(item);
+                            });
+                        });
+                        ListView.ItemsSource = masterNavigationItems;
                     }
                     else
                     {
-                        flickrClient.CancelPendingRequests(); // cancel search
+                        await DisplayAlert("Alert", "No matches", "OK");
                     }
                 }
-
-                // Flickr's web service URL for searches                         
-                var flickrURL = "https://api.flickr.com/services/rest/?method=" +
-                   $"flickr.photos.search&api_key={KEY}&" +
-                   $"tags={txtSearch.Text.Replace(" ", ",")}" +
-                   "&tag_mode=all&per_page=500&privacy_filter=1";
-
-                ListView.ItemsSource = null;
-                flickrPhotos = new List<FlickrResult>() { };
-                masterNavigationItems = new List<MasterNavigationItem>() { };
-
-                flickrTask = flickrClient.GetStringAsync(flickrURL);
-
-                XDocument flickrXML = XDocument.Parse(await flickrTask);
-
-                flickrPhotos =
-                (from photo in flickrXML.Descendants("photo")
-                 let id = photo.Attribute("id").Value
-                 let title = photo.Attribute("title").Value
-                 let secret = photo.Attribute("secret").Value
-                 let server = photo.Attribute("server").Value
-                 let farm = photo.Attribute("farm").Value
-                 select new FlickrResult
-                 {
-                     Title = title,
-                     URL = $"https://farm{farm}.staticflickr.com/" +
-                       $"{server}/{id}_{secret}.jpg"
-                 }).ToList();
-
-                if (flickrPhotos.Any())
+                catch(Exception ex)
                 {
-                    await Task.Factory.StartNew(() =>
-                    {
-                        ParallelLoopResult loopResult = Parallel.ForEach<FlickrResult>(flickrPhotos, photo =>
-                        {
-                            MasterNavigationItem item = new MasterNavigationItem
-                            {
-                                Icon = photo.URL,
-                                Title = photo.Title,
-                                Target = typeof(DetailPageView)
-                            };
-
-                            masterNavigationItems.Add(item);
-                        });
-                    });
-                    ListView.ItemsSource = masterNavigationItems;
-                }
-                else 
-                {
-                    await DisplayAlert("Alert", "No matches", "OK");
+                    await DisplayAlert("Exception!", ex.Message, "OK");
                 }
             }
         }
